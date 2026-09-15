@@ -71,11 +71,13 @@
         });
     }
 
-    var scanner = new Html5Qrcode("reader");
+    var scanner = new Html5Qrcode("reader", {
+    formatsToSupport: [ Html5QrcodeSupportedFormats.CODE_128 ]
+    });
     scanner.start(
-      { facingMode: "environment" },
-      { fps: 10, qrbox: 220 },
-      onScanSuccess
+    { facingMode: "environment" },
+    { fps: 10, qrbox: { width: 250, height: 100 } },
+    onScanSuccess
     );
   </script>
 </body>
