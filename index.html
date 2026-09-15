@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Escáner de Stock - WestSide Tech</title>
+  <style>
+    body { font-family: sans-serif; background:#0E1117; color:#F2F4F6; margin:0; padding:16px; }
+    h1 { font-size:1.1rem; }
+    #reader { width:100%; border-radius:8px; overflow:hidden; margin-bottom:12px; }
+    .toggle { display:flex; gap:8px; margin-bottom:12px; }
+    .toggle button { flex:1; padding:10px; border-radius:8px; border:1px solid #2A313D; background:#161A22; color:#8B93A1; font-weight:600; }
+    .toggle button.active { background:#173330; color:#2DD4BF; border-color:#2DD4BF; }
+    input[type=number] { width:100%; padding:10px; margin-bottom:12px; border-radius:8px; border:1px solid #2A313D; background:#161A22; color:#F2F4F6; box-sizing:border-box; }
+    #resultado { padding:12px; border-radius:8px; margin-top:12px; font-size:0.9rem; }
+    .ok { background:#173330; color:#2DD4BF; }
+    .error { background:#2E1B17; color:#EF6B4E; }
+  </style>
+</head>
+<body>
+  <h1>Escáner de Stock — WestSide Tech</h1>
+  <div class="toggle">
+    <button id="btnSumar" class="active">Sumar stock</button>
+    <button id="btnVender">Vender</button>
+  </div>
+  <input type="number" id="cantidad" value="1" min="1" placeholder="Cantidad">
+  <div id="reader"></div>
+  <div id="resultado"></div>
+
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script>
+    var SCRIPT_URL = "https://script.google.com/macros/s/AKfycbypo6SHxKmvkLytTUGFdnV7WKB9O2Kj0cYrHl6KzT6h1SJfJJVLJW0iprSiv2Ow9P5Ptg/exec";
+    var accion = 'sumar';
+
+    document.getElementById('btnSumar').onclick = function () {
+      accion = 'sumar';
+      document.getElementById('btnSumar').classList.add('active');
+      document.getElementById('btnVender').classList.remove('active');
+    };
+    document.getElementById('btnVender').onclick = function () {
+      accion = 'vender';
+      document.getElementById('btnVender').classList.add('active');
+      document.getElementById('btnSumar').classList.remove('active');
+    };
+
+    var procesando = false;
+
+    function onScanSuccess(decodedText) {
+      if (procesando) return;
+      procesando = true;
+      var cantidad = document.getElementById('cantidad').value || 1;
+      var resultado = document.getElementById('resultado');
+      resultado.className = '';
+      resultado.textContent = 'Procesando...';
+
+      fetch(SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ codigo: decodedText, accion: accion, cantidad: cantidad })
+      })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          resultado.className = data.ok ? 'ok' : 'error';
+          resultado.textContent = data.mensaje;
+          procesando = false;
+        })
+        .catch(function (err) {
+          resultado.className = 'error';
+          resultado.textContent = 'Error: ' + err.message;
+          procesando = false;
+        });
+    }
+
+    var scanner = new Html5Qrcode("reader");
+    scanner.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: 220 },
+      onScanSuccess
+    );
+  </script>
+</body>
+</html>
