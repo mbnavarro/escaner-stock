@@ -15,6 +15,12 @@
     #resultado { padding:12px; border-radius:8px; margin-top:12px; font-size:0.9rem; }
     .ok { background:#173330; color:#2DD4BF; }
     .error { background:#2E1B17; color:#EF6B4E; }
+    #confirmacion { display:none; background:#161A22; border:1px solid #2A313D; border-radius:8px; padding:14px; margin-top:12px; }
+    #confirmTexto { font-size:0.95rem; margin-bottom:12px; }
+    .confirm-botones { display:flex; gap:8px; }
+    .confirm-botones button { flex:1; padding:10px; border-radius:8px; font-weight:600; border:1px solid; }
+    #btnConfirmar { background:#173330; color:#2DD4BF; border-color:#2DD4BF; }
+    #btnCancelar { background:#2E1B17; color:#EF6B4E; border-color:#EF6B4E; }
   </style>
 </head>
 <body>
@@ -27,10 +33,20 @@
   <div id="reader"></div>
   <div id="resultado"></div>
 
+  <div id="confirmacion">
+    <div id="confirmTexto"></div>
+    <div class="confirm-botones">
+      <button id="btnConfirmar">Confirmar</button>
+      <button id="btnCancelar">Cancelar</button>
+    </div>
+  </div>
+
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script>
     var SCRIPT_URL = "https://script.google.com/macros/s/AKfycbypo6SHxKmvkLytTUGFdnV7WKB9O2Kj0cYrHl6KzT6h1SJfJJVLJW0iprSiv2Ow9P5Ptg/exec";
     var accion = 'sumar';
+    var procesando = false;
+    var pendiente = null;
 
     document.getElementById('btnSumar').onclick = function () {
       accion = 'sumar';
@@ -43,41 +59,94 @@
       document.getElementById('btnSumar').classList.remove('active');
     };
 
-    var procesando = false;
+    var resultadoDiv = document.getElementById('resultado');
+    var confirmacionDiv = document.getElementById('confirmacion');
+    var confirmTextoDiv = document.getElementById('confirmTexto');
 
     function onScanSuccess(decodedText) {
       if (procesando) return;
       procesando = true;
+      scanner.pause(true);
+
       var cantidad = document.getElementById('cantidad').value || 1;
-      var resultado = document.getElementById('resultado');
-      resultado.className = '';
-      resultado.textContent = 'Procesando...';
+      pendiente = { codigo: decodedText, cantidad: cantidad, accion: accion };
+
+      resultadoDiv.className = '';
+      resultadoDiv.textContent = 'Buscando producto...';
+      confirmacionDiv.style.display = 'none';
 
       fetch(SCRIPT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ codigo: decodedText, accion: accion, cantidad: cantidad })
+        body: JSON.stringify({ codigo: decodedText, accion: 'buscar' })
       })
         .then(function (res) { return res.json(); })
         .then(function (data) {
-          resultado.className = data.ok ? 'ok' : 'error';
-          resultado.textContent = data.mensaje;
-          procesando = false;
+          resultadoDiv.textContent = '';
+          if (data.ok) {
+            mostrarConfirmacion(data);
+          } else {
+            resultadoDiv.className = 'error';
+            resultadoDiv.textContent = data.mensaje;
+            setTimeout(finalizarEscaneo, 2000);
+          }
         })
         .catch(function (err) {
-          resultado.className = 'error';
-          resultado.textContent = 'Error: ' + err.message;
-          procesando = false;
+          resultadoDiv.className = 'error';
+          resultadoDiv.textContent = 'Error: ' + err.message;
+          setTimeout(finalizarEscaneo, 2000);
         });
     }
 
+    function mostrarConfirmacion(data) {
+      var verbo = pendiente.accion === 'sumar' ? 'sumar' : 'restar';
+      confirmTextoDiv.textContent = '¿Confirmás ' + verbo + ' ' + pendiente.cantidad + ' de "' + data.modelo + '" (' + data.categoria + ')? Stock actual: ' + data.stockActual;
+      confirmacionDiv.style.display = 'block';
+    }
+
+    document.getElementById('btnConfirmar').onclick = function () {
+      confirmacionDiv.style.display = 'none';
+      resultadoDiv.className = '';
+      resultadoDiv.textContent = 'Procesando...';
+
+      fetch(SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ codigo: pendiente.codigo, accion: pendiente.accion, cantidad: pendiente.cantidad })
+      })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          resultadoDiv.className = data.ok ? 'ok' : 'error';
+          resultadoDiv.textContent = data.mensaje;
+          finalizarEscaneo();
+        })
+        .catch(function (err) {
+          resultadoDiv.className = 'error';
+          resultadoDiv.textContent = 'Error: ' + err.message;
+          finalizarEscaneo();
+        });
+    };
+
+    document.getElementById('btnCancelar').onclick = function () {
+      confirmacionDiv.style.display = 'none';
+      resultadoDiv.className = '';
+      resultadoDiv.textContent = '';
+      finalizarEscaneo();
+    };
+
+    function finalizarEscaneo() {
+      pendiente = null;
+      procesando = false;
+      scanner.resume();
+    }
+
     var scanner = new Html5Qrcode("reader", {
-    formatsToSupport: [ Html5QrcodeSupportedFormats.CODE_128 ]
+      formatsToSupport: [ Html5QrcodeSupportedFormats.CODE_128 ]
     });
     scanner.start(
-    { facingMode: "environment" },
-    { fps: 10, qrbox: { width: 250, height: 100 } },
-    onScanSuccess
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 250, height: 100 } },
+      onScanSuccess
     );
   </script>
 </body>
