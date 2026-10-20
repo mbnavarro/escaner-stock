@@ -100,7 +100,8 @@
 
     function mostrarConfirmacion(data) {
       var verbo = pendiente.accion === 'sumar' ? 'sumar' : 'restar';
-      confirmTextoDiv.textContent = '¿Confirmás ' + verbo + ' ' + pendiente.cantidad + ' de "' + data.modelo + '" (' + data.categoria + ')? Stock actual: ' + data.stockActual;
+      var colorTexto = (data.categoria === 'Funda' && data.color) ? ' - Color: ' + data.color : '';
+      confirmTextoDiv.textContent = '¿Confirmás ' + verbo + ' ' + pendiente.cantidad + ' de "' + data.modelo + '"' + colorTexto + ' (' + data.categoria + ')? Stock actual: ' + data.stockActual;
       confirmacionDiv.style.display = 'block';
     }
 
