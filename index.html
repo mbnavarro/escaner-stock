@@ -32,6 +32,12 @@
     .chip.nuevo { color:#8B93A1; border-style:dashed; }
     #colorNuevo { display:none; margin-bottom:0; }
     #avisoColor { color:#EF6B4E; font-size:0.8rem; margin-top:6px; display:none; }
+
+    /* Foto de la funda */
+    #bloqueFoto { display:none; margin-top:12px; }
+    .btn-foto { display:inline-block; padding:10px 14px; border-radius:8px; border:1px solid #2DD4BF; background:#173330; color:#2DD4BF; font-weight:600; font-size:0.85rem; cursor:pointer; }
+    #previewFoto { display:none; width:96px; height:96px; object-fit:cover; border-radius:8px; margin-top:10px; border:1px solid #2A313D; }
+    #avisoFoto { color:#8B93A1; font-size:0.75rem; margin-top:6px; }
   </style>
 </head>
 <body>
@@ -52,6 +58,13 @@
       <div id="opcionesColor"></div>
       <input type="text" id="colorNuevo" placeholder="Nombre del color nuevo">
       <div id="avisoColor"></div>
+
+      <div id="bloqueFoto">
+        <label class="btn-foto" for="inputFoto">📷 Sacar foto (opcional)</label>
+        <input type="file" id="inputFoto" accept="image/*" capture="environment" style="display:none;">
+        <div><img id="previewFoto" alt="Foto de la funda"></div>
+        <div id="avisoFoto"></div>
+      </div>
     </div>
 
     <div class="confirm-botones">
@@ -86,6 +99,10 @@
     var colorNuevoInput = document.getElementById('colorNuevo');
     var avisoColorDiv = document.getElementById('avisoColor');
     var btnConfirmar = document.getElementById('btnConfirmar');
+    var bloqueFoto = document.getElementById('bloqueFoto');
+    var inputFoto = document.getElementById('inputFoto');
+    var previewFoto = document.getElementById('previewFoto');
+    var avisoFoto = document.getElementById('avisoFoto');
 
     function onScanSuccess(decodedText) {
       if (procesando) return;
@@ -129,6 +146,7 @@
       pendiente.color = data.color || '';
       pendiente.requiereColor = !!data.requiereColor;
       pendiente.colores = data.colores || [];
+      pendiente.foto = '';
 
       if (pendiente.requiereColor) {
         pendiente.color = '';
@@ -184,6 +202,7 @@
       chip.classList.add('active');
       avisoColorDiv.style.display = 'none';
 
+      limpiarFoto();
       if (esNuevo) {
         pendiente.colorNuevo = true;
         pendiente.color = '';
@@ -232,7 +251,62 @@
       }
 
       confirmTextoDiv.textContent = texto;
+      actualizarBloqueFoto();
     }
+
+    // ---------- Foto de la funda ----------
+
+    function colorTieneFoto(color) {
+      for (var i = 0; i < pendiente.colores.length; i++) {
+        if (pendiente.colores[i].color === color) return !!pendiente.colores[i].foto;
+      }
+      return false;
+    }
+
+    // Se ofrece sacar foto si es un color nuevo o si el color elegido todavía no tiene foto
+    function actualizarBloqueFoto() {
+      var ofrecer = pendiente && pendiente.requiereColor && pendiente.color &&
+        (pendiente.colorNuevo || !colorTieneFoto(pendiente.color));
+      bloqueFoto.style.display = ofrecer ? 'block' : 'none';
+      if (!ofrecer) limpiarFoto();
+    }
+
+    function limpiarFoto() {
+      if (pendiente) pendiente.foto = '';
+      inputFoto.value = '';
+      previewFoto.style.display = 'none';
+      previewFoto.removeAttribute('src');
+      avisoFoto.textContent = '';
+    }
+
+    function reducirImagen(archivo, maxLado, calidad, cb) {
+      var img = new Image();
+      var url = URL.createObjectURL(archivo);
+      img.onload = function () {
+        var escala = Math.min(1, maxLado / Math.max(img.width, img.height));
+        var c = document.createElement('canvas');
+        c.width = Math.round(img.width * escala);
+        c.height = Math.round(img.height * escala);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        cb(c.toDataURL('image/jpeg', calidad));
+      };
+      img.onerror = function () { cb(null); };
+      img.src = url;
+    }
+
+    inputFoto.onchange = function () {
+      var archivo = inputFoto.files && inputFoto.files[0];
+      if (!archivo) return;
+      avisoFoto.textContent = 'Preparando foto...';
+      reducirImagen(archivo, 1000, 0.7, function (dataUrl) {
+        if (!dataUrl) { avisoFoto.textContent = 'No se pudo leer la foto.'; return; }
+        pendiente.foto = dataUrl.split(',')[1];
+        previewFoto.src = dataUrl;
+        previewFoto.style.display = 'block';
+        avisoFoto.textContent = 'Foto lista. Se guarda al confirmar.';
+      });
+    };
 
     // ---------- Confirmar / cancelar ----------
 
@@ -249,6 +323,9 @@
 
       var cuerpo = { codigo: pendiente.codigo, accion: pendiente.accion, cantidad: pendiente.cantidad };
       if (pendiente.requiereColor) cuerpo.color = pendiente.color;
+      var fotoPendiente = pendiente.foto;
+      var codigoFoto = pendiente.codigo;
+      var colorFoto = pendiente.color;
 
       fetch(SCRIPT_URL, {
         method: 'POST',
@@ -259,8 +336,20 @@
         .then(function (data) {
           resultadoDiv.className = data.ok ? 'ok' : 'error';
           resultadoDiv.textContent = data.mensaje;
-          finalizarEscaneo();
+          if (data.ok && fotoPendiente) {
+            resultadoDiv.textContent = data.mensaje + ' · Subiendo foto...';
+            return fetch(SCRIPT_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+              body: JSON.stringify({ accion: 'foto', codigo: codigoFoto, color: colorFoto, imagen: fotoPendiente })
+            })
+              .then(function (res) { return res.json(); })
+              .then(function (f) {
+                resultadoDiv.textContent = data.mensaje + (f.ok ? ' · Foto guardada' : ' · La foto no se guardó: ' + f.mensaje);
+              });
+          }
         })
+        .then(function () { finalizarEscaneo(); })
         .catch(function (err) {
           resultadoDiv.className = 'error';
           resultadoDiv.textContent = 'Error: ' + err.message;
@@ -279,6 +368,9 @@
       pendiente = null;
       procesando = false;
       selectorColorDiv.style.display = 'none';
+      bloqueFoto.style.display = 'none';
+      previewFoto.style.display = 'none';
+      inputFoto.value = '';
       btnConfirmar.disabled = false;
       scanner.resume();
     }
