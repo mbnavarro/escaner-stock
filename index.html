@@ -46,7 +46,7 @@
     <button id="btnSumar" class="active">Sumar stock</button>
     <button id="btnVender">Vender</button>
   </div>
-  <input type="number" id="cantidad" value="1" min="1" placeholder="Cantidad">
+  <input type="number" id="cantidad" value="1" min="0" placeholder="Cantidad">
   <div id="reader"></div>
   <div id="resultado"></div>
 
@@ -109,7 +109,7 @@
       procesando = true;
       scanner.pause(true);
 
-      var cantidad = document.getElementById('cantidad').value || 1;
+      var cantidad = leerCantidad();
       pendiente = { codigo: decodedText, cantidad: cantidad, accion: accion };
 
       resultadoDiv.className = '';
@@ -228,6 +228,19 @@
       return 0;
     }
 
+    // Cantidad escrita en el cuadro (acepta 0 para cambiar solo la foto)
+    function leerCantidad() {
+      var n = parseInt(document.getElementById('cantidad').value, 10);
+      return isNaN(n) || n < 0 ? 1 : n;
+    }
+
+    // Si cambiás la cantidad después de escanear, se actualiza la confirmación
+    document.getElementById('cantidad').oninput = function () {
+      if (!pendiente) return;
+      pendiente.cantidad = leerCantidad();
+      actualizarConfirmacion();
+    };
+
     function actualizarConfirmacion() {
       var verbo = pendiente.accion === 'sumar' ? 'sumar' : 'restar';
       var texto;
@@ -263,11 +276,12 @@
       return false;
     }
 
-    // Se ofrece sacar foto si es un color nuevo o si el color elegido todavía no tiene foto
+    // Se ofrece sacar foto siempre que haya un color elegido; si ya tiene, dice "Cambiar foto"
     function actualizarBloqueFoto() {
-      var ofrecer = pendiente && pendiente.requiereColor && pendiente.color &&
-        (pendiente.colorNuevo || !colorTieneFoto(pendiente.color));
+      var ofrecer = pendiente && pendiente.requiereColor && pendiente.color;
+      var tiene = ofrecer && !pendiente.colorNuevo && colorTieneFoto(pendiente.color);
       bloqueFoto.style.display = ofrecer ? 'block' : 'none';
+      document.querySelector('.btn-foto').textContent = tiene ? '📷 Cambiar foto (opcional)' : '📷 Sacar foto (opcional)';
       if (!ofrecer) limpiarFoto();
     }
 
@@ -311,6 +325,7 @@
     // ---------- Confirmar / cancelar ----------
 
     btnConfirmar.onclick = function () {
+      pendiente.cantidad = leerCantidad();
       if (pendiente.requiereColor && !pendiente.color) {
         avisoColorDiv.textContent = 'Elegí un color antes de confirmar.';
         avisoColorDiv.style.display = 'block';
